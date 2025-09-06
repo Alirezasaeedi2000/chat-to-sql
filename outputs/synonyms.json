@@ -1,0 +1,14 @@
+{
+  "schema_synonyms": {
+    "customers": ["clients", "shoppers", "purchasers"],
+    "orders": ["sales", "transactions", "purchases"],
+    "products": ["items", "goods", "merchandise"],
+    "revenue": ["income", "earnings", "profit"],
+    "region": ["location", "area", "territory"]
+  },
+  "column_synonyms": {
+    "users.created_at": ["signup_date", "registration_date"],
+    "orders.order_date": ["purchase_date", "transaction_time"],
+    "products.name": ["product_title", "item_name"]
+  }
+}

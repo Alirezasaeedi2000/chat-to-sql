@@ -1,0 +1,13 @@
+langchain
+langchain-community
+langchain-ollama
+SQLAlchemy
+PyMySQL
+sqlparse
+sentence-transformers
+faiss-cpu
+pandas
+numpy
+termcolor
+matplotlib
+python-dotenv

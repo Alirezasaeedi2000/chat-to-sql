@@ -1,0 +1,12 @@
+[
+  {
+    "col_1": "value1",
+    "col_2": "value2",
+    "col_3": 100
+  },
+  {
+    "col_1": "value3",
+    "col_2": "value4",
+    "col_3": 200
+  }
+]
