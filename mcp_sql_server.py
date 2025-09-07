@@ -5,7 +5,7 @@ import os
 from typing import Any, Dict, Optional, Callable
 
 from mcp.server import Server
-from mcp.server.models import InitializationOptions, NotificationOptions
+from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
 from query_processor import SafeSqlExecutor, create_engine_from_env
@@ -224,10 +224,10 @@ if hasattr(server, "method"):
 
 async def main() -> None:
     async with stdio_server() as (read, write):
-        capabilities = server.get_capabilities(
-            notification_options=NotificationOptions(),
-            experimental_capabilities={},
-        )
+        try:
+            capabilities = server.get_capabilities()  # type: ignore[call-arg]
+        except Exception:
+            capabilities = {}
         await server.run(
             read,
             write,
