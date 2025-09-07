@@ -6,16 +6,27 @@ from typing import Any, Dict, Optional, Callable
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
+# Version-tolerant imports without symbol lookups to satisfy Pylance
 try:
-    # Preferred in some versions
-    from mcp.server.models import InitializationOptions, NotificationOptions
-except Exception:  # pragma: no cover - version compatibility
-    try:
-        # Alternate location in other versions
-        from mcp.types import InitializationOptions, NotificationOptions
-    except Exception:  # pragma: no cover
-        InitializationOptions = None  # type: ignore
-        NotificationOptions = None  # type: ignore
+    import mcp.server.models as _mcp_models  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover
+    _mcp_models = None  # type: ignore[assignment]
+try:
+    import mcp.types as _mcp_types  # type: ignore[import-not-found]
+except Exception:  # pragma: no cover
+    _mcp_types = None  # type: ignore[assignment]
+
+# Resolve classes dynamically (may be None if not present)
+InitializationOptions = (
+    getattr(_mcp_models, "InitializationOptions", None) if _mcp_models else None
+) or (
+    getattr(_mcp_types, "InitializationOptions", None) if _mcp_types else None
+)
+NotificationOptions = (
+    getattr(_mcp_models, "NotificationOptions", None) if _mcp_models else None
+) or (
+    getattr(_mcp_types, "NotificationOptions", None) if _mcp_types else None
+)
 
 from query_processor import SafeSqlExecutor, create_engine_from_env
 from vector import VectorStoreManager
@@ -217,11 +228,11 @@ def _list_tools_payload() -> Dict[str, Any]:
 
 
 if hasattr(server, "method"):
-    @server.method("tools/list")
+    @server.method("tools/list")  # type: ignore[attr-defined]
     async def _tools_list() -> Dict[str, Any]:
         return _list_tools_payload()
 
-    @server.method("tools/call")
+    @server.method("tools/call")  # type: ignore[attr-defined]
     async def _tools_call(name: str, arguments: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
         func = TOOLS.get(name)
         if func is None:
@@ -250,7 +261,7 @@ async def main() -> None:
         else:
             # Fallback for unknown versions; may still work at runtime
             init_opts = {"server_name": "mysql-nl2sql", "server_version": "0.1.0"}
-        await server.run(read, write, init_opts)
+        await server.run(read, write, init_opts)  # type: ignore[arg-type]
 
 
 if __name__ == "__main__":
