@@ -4,29 +4,9 @@ import logging
 import os
 from typing import Any, Dict, Optional, Callable
 
-from mcp.server import Server
+from mcp.server.lowlevel import Server, NotificationOptions
+from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
-# Version-tolerant imports without symbol lookups to satisfy Pylance
-try:
-    import mcp.server.models as _mcp_models  # type: ignore[import-not-found]
-except Exception:  # pragma: no cover
-    _mcp_models = None  # type: ignore[assignment]
-try:
-    import mcp.types as _mcp_types  # type: ignore[import-not-found]
-except Exception:  # pragma: no cover
-    _mcp_types = None  # type: ignore[assignment]
-
-# Resolve classes dynamically (may be None if not present)
-InitializationOptions = (
-    getattr(_mcp_models, "InitializationOptions", None) if _mcp_models else None
-) or (
-    getattr(_mcp_types, "InitializationOptions", None) if _mcp_types else None
-)
-NotificationOptions = (
-    getattr(_mcp_models, "NotificationOptions", None) if _mcp_models else None
-) or (
-    getattr(_mcp_types, "NotificationOptions", None) if _mcp_types else None
-)
 
 from query_processor import SafeSqlExecutor, create_engine_from_env
 from vector import VectorStoreManager
@@ -227,45 +207,35 @@ def _list_tools_payload() -> Dict[str, Any]:
     }
 
 
-if hasattr(server, "method"):
-    @server.method("tools/list")  # type: ignore[attr-defined]
-    async def _tools_list() -> Dict[str, Any]:
-        return _list_tools_payload()
+@server.method("tools/list")
+async def _tools_list() -> Dict[str, Any]:
+    return _list_tools_payload()
 
-    @server.method("tools/call")  # type: ignore[attr-defined]
-    async def _tools_call(name: str, arguments: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
-        func = TOOLS.get(name)
-        if func is None:
-            return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}], "is_error": True}
-        result = await func(arguments or {})
-        return {"content": [{"type": "json", "json": result}], "is_error": False}
+
+@server.method("tools/call")
+async def _tools_call(name: str, arguments: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+    func = TOOLS.get(name)
+    if func is None:
+        return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}], "is_error": True}
+    result = await func(arguments or {})
+    return {"content": [{"type": "json", "json": result}], "is_error": False}
 
 
 async def main() -> None:
     async with stdio_server() as (read, write):
-        init_opts: Any
-        # Build capabilities robustly across versions
-        caps: Any = None
-        try:
-            if hasattr(server, "get_capabilities"):
-                if NotificationOptions is not None:
-                    caps = server.get_capabilities(notification_options=NotificationOptions(), experimental_capabilities={})
-                else:
-                    caps = server.get_capabilities()  # type: ignore[call-arg]
-        except Exception:
-            caps = None
-        if caps is None:
-            caps = {}
-
-        if InitializationOptions is not None:
-            try:
-                init_opts = InitializationOptions(server_name="mysql-nl2sql", server_version="0.1.0", capabilities=caps)
-            except Exception:
-                init_opts = {"server_name": "mysql-nl2sql", "server_version": "0.1.0", "capabilities": caps}
-        else:
-            init_opts = {"server_name": "mysql-nl2sql", "server_version": "0.1.0", "capabilities": caps}
-
-        await server.run(read, write, init_opts)  # type: ignore[arg-type]
+        capabilities = server.get_capabilities(
+            notification_options=NotificationOptions(),
+            experimental_capabilities={},
+        )
+        await server.run(
+            read,
+            write,
+            InitializationOptions(
+                server_name="mysql-nl2sql",
+                server_version="0.1.0",
+                capabilities=capabilities,
+            ),
+        )
 
 
 if __name__ == "__main__":
