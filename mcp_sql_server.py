@@ -244,23 +244,27 @@ if hasattr(server, "method"):
 async def main() -> None:
     async with stdio_server() as (read, write):
         init_opts: Any
-        if InitializationOptions is not None and NotificationOptions is not None and hasattr(server, "get_capabilities"):
+        # Build capabilities robustly across versions
+        caps: Any = None
+        try:
+            if hasattr(server, "get_capabilities"):
+                if NotificationOptions is not None:
+                    caps = server.get_capabilities(notification_options=NotificationOptions(), experimental_capabilities={})
+                else:
+                    caps = server.get_capabilities()
+        except Exception:
+            caps = None
+        if caps is None:
+            caps = {}
+
+        if InitializationOptions is not None:
             try:
-                init_opts = InitializationOptions(
-                    server_name="mysql-nl2sql",
-                    server_version="0.1.0",
-                    capabilities=server.get_capabilities(
-                        notification_options=NotificationOptions(),
-                        experimental_capabilities={},
-                    ),
-                )
+                init_opts = InitializationOptions(server_name="mysql-nl2sql", server_version="0.1.0", capabilities=caps)
             except Exception:
-                init_opts = InitializationOptions(server_name="mysql-nl2sql", server_version="0.1.0")  # type: ignore[arg-type]
-        elif InitializationOptions is not None:
-            init_opts = InitializationOptions(server_name="mysql-nl2sql", server_version="0.1.0")  # type: ignore[arg-type]
+                init_opts = {"server_name": "mysql-nl2sql", "server_version": "0.1.0", "capabilities": caps}
         else:
-            # Fallback for unknown versions; may still work at runtime
-            init_opts = {"server_name": "mysql-nl2sql", "server_version": "0.1.0"}
+            init_opts = {"server_name": "mysql-nl2sql", "server_version": "0.1.0", "capabilities": caps}
+
         await server.run(read, write, init_opts)  # type: ignore[arg-type]
 
 
