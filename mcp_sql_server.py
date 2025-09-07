@@ -251,7 +251,7 @@ async def main() -> None:
                 if NotificationOptions is not None:
                     caps = server.get_capabilities(notification_options=NotificationOptions(), experimental_capabilities={})
                 else:
-                    caps = server.get_capabilities()
+                    caps = server.get_capabilities()  # type: ignore[call-arg]
         except Exception:
             caps = None
         if caps is None:
