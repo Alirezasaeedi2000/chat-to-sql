@@ -4,7 +4,8 @@ import logging
 import os
 from typing import Any, Dict, Optional, Callable
 
-from mcp.server import Server
+from mcp.server.lowlevel import Server, NotificationOptions
+from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
 from query_processor import SafeSqlExecutor, create_engine_from_env
@@ -38,18 +39,24 @@ async def tool_get_schema(_: Dict[str, Any]) -> Dict[str, Any]:
 
 async def tool_describe_table(args: Dict[str, Any]) -> Dict[str, Any]:
     table = args.get("table")
+    if not isinstance(table, str) or not table:
+        return {"error": "Missing required string argument: table"}
     execu = build_executor()
     return execu.describe_table(table)
 
 
 async def tool_find_tables(args: Dict[str, Any]) -> Dict[str, Any]:
     pattern = args.get("pattern", ".*")
+    if not isinstance(pattern, str):
+        pattern = str(pattern)
     execu = build_executor()
     return {"matches": execu.find_tables(pattern)}
 
 
 async def tool_find_columns(args: Dict[str, Any]) -> Dict[str, Any]:
     pattern = args.get("pattern", ".*")
+    if not isinstance(pattern, str):
+        pattern = str(pattern)
     execu = build_executor()
     return {"matches": execu.find_columns(pattern)}
 
@@ -57,6 +64,8 @@ async def tool_find_columns(args: Dict[str, Any]) -> Dict[str, Any]:
 async def tool_distinct_values(args: Dict[str, Any]) -> Dict[str, Any]:
     table = args.get("table")
     column = args.get("column")
+    if not isinstance(table, str) or not isinstance(column, str) or not table or not column:
+        return {"error": "Arguments 'table' and 'column' must be non-empty strings"}
     limit = int(args.get("limit", 50))
     execu = build_executor()
     vals = execu.distinct_values(table, column, limit)
@@ -65,6 +74,8 @@ async def tool_distinct_values(args: Dict[str, Any]) -> Dict[str, Any]:
 
 async def tool_run_sql(args: Dict[str, Any]) -> Dict[str, Any]:
     query = args.get("query")
+    if not isinstance(query, str) or not query:
+        return {"error": "Missing required string argument: query"}
     execu = build_executor()
     df, safe_sql = execu.execute_select(query)
     rows = df.to_dict(orient="records")
@@ -73,6 +84,8 @@ async def tool_run_sql(args: Dict[str, Any]) -> Dict[str, Any]:
 
 async def tool_explain_sql(args: Dict[str, Any]) -> Dict[str, Any]:
     query = args.get("query")
+    if not isinstance(query, str) or not query:
+        return {"error": "Missing required string argument: query"}
     execu = build_executor()
     df = execu.explain(query)
     return {"rows": df.to_dict(orient="records")}
@@ -81,6 +94,10 @@ async def tool_explain_sql(args: Dict[str, Any]) -> Dict[str, Any]:
 async def tool_export(args: Dict[str, Any]) -> Dict[str, Any]:
     query = args.get("query")
     fmt = args.get("fmt", "csv")
+    if not isinstance(query, str) or not query:
+        return {"error": "Missing required string argument: query"}
+    if not isinstance(fmt, str):
+        fmt = str(fmt)
     execu = build_executor()
     df, safe_sql = execu.execute_select(query)
     os.makedirs("outputs/exports", exist_ok=True)
@@ -127,6 +144,10 @@ async def tool_save_query(args: Dict[str, Any]) -> Dict[str, Any]:
     name = args.get("name")
     query = args.get("query")
     description = args.get("description")
+    if not isinstance(name, str) or not name:
+        return {"error": "Missing required string argument: name"}
+    if not isinstance(query, str) or not query:
+        return {"error": "Missing required string argument: query"}
     execu = build_executor()
     execu.validate_select_only(query)
     data = _load_saved()
@@ -141,6 +162,8 @@ async def tool_save_query(args: Dict[str, Any]) -> Dict[str, Any]:
 
 async def tool_run_saved_query(args: Dict[str, Any]) -> Dict[str, Any]:
     name = args.get("name")
+    if not isinstance(name, str) or not name:
+        return {"error": "Missing required string argument: name"}
     data = _load_saved()
     item = data.get(name)
     if not item:
@@ -184,23 +207,34 @@ def _list_tools_payload() -> Dict[str, Any]:
     }
 
 
-if hasattr(server, "method"):
-    @server.method("tools/list")
-    async def _tools_list() -> Dict[str, Any]:
-        return _list_tools_payload()
+@server.method("tools/list")
+async def _tools_list() -> Dict[str, Any]:
+    return _list_tools_payload()
 
-    @server.method("tools/call")
-    async def _tools_call(name: str, arguments: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
-        func = TOOLS.get(name)
-        if func is None:
-            return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}], "is_error": True}
-        result = await func(arguments or {})
-        return {"content": [{"type": "json", "json": result}], "is_error": False}
+
+@server.method("tools/call")
+async def _tools_call(name: str, arguments: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+    func = TOOLS.get(name)
+    if func is None:
+        return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}], "is_error": True}
+    result = await func(arguments or {})
+    return {"content": [{"type": "json", "json": result}], "is_error": False}
 
 
 async def main() -> None:
     async with stdio_server() as (read, write):
-        await server.run(read, write, initialization_options={})
+        await server.run(
+            read,
+            write,
+            InitializationOptions(
+                server_name="mysql-nl2sql",
+                server_version="0.1.0",
+                capabilities=server.get_capabilities(
+                    notification_options=NotificationOptions(),
+                    experimental_capabilities={},
+                ),
+            ),
+        )
 
 
 if __name__ == "__main__":
