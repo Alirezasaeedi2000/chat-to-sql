@@ -4,7 +4,7 @@ import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import pandas as pd
 import sqlparse
@@ -77,6 +77,42 @@ def _parse_json_block(text_value: str) -> Optional[Dict[str, Any]]:
         return json.loads(cleaned)
     except Exception:
         return None
+
+
+def _stringify_llm_content(value: Any) -> str:
+    """Convert LLM response content into a plain string for parsing.
+
+    Handles cases where the content can be a list of chunks or a dict.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts: List[str] = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                if "text" in item and isinstance(item["text"], str):
+                    parts.append(item["text"]) 
+                elif "json" in item:
+                    try:
+                        parts.append(json.dumps(item["json"]))
+                    except Exception:
+                        parts.append(str(item["json"]))
+                else:
+                    parts.append(str(item))
+            else:
+                parts.append(str(item))
+        return "\n".join(parts)
+    if isinstance(value, dict):
+        if "text" in value and isinstance(value["text"], str):
+            return value["text"]
+        try:
+            return json.dumps(value)
+        except Exception:
+            return str(value)
+    # Fallback
+    return str(value)
 
 
 class SqlValidationError(Exception):
@@ -236,7 +272,8 @@ class QueryProcessor:
         prompt = sys_prompt + "\n\nExamples:\n" + "\n\n".join(few_shots) + "\n\nUser:\n" + json.dumps(input_block, ensure_ascii=False)
         try:
             resp = self.llm.invoke(prompt)
-            txt = resp.content if hasattr(resp, "content") else str(resp)
+            raw = resp.content if hasattr(resp, "content") else resp
+            txt: str = _stringify_llm_content(raw)
             data = _parse_json_block(txt)
             if data and "mode" in data:
                 return data["mode"].strip().upper()
@@ -263,7 +300,8 @@ class QueryProcessor:
         prompt = sys_prompt + "\n\n" + json.dumps(payload, ensure_ascii=False)
         try:
             resp = self.llm.invoke(prompt)
-            txt = resp.content if hasattr(resp, "content") else str(resp)
+            raw = resp.content if hasattr(resp, "content") else resp
+            txt: str = _stringify_llm_content(raw)
             sql = _extract_sql_from_text(txt)
             return sql
         except Exception as exc:
@@ -326,7 +364,9 @@ class QueryProcessor:
         prompt = sys_prompt + "\n\n" + json.dumps(summary, ensure_ascii=False)
         try:
             resp = self.llm.invoke(prompt)
-            return resp.content if hasattr(resp, "content") else str(resp)
+            raw = resp.content if hasattr(resp, "content") else resp
+            text_out: str = _stringify_llm_content(raw)
+            return text_out
         except Exception as exc:
             LOGGER.warning("Analytical narration failed: %s", exc)
             return "Unable to generate analytical summary."
@@ -352,7 +392,9 @@ class QueryProcessor:
                 }
                 try:
                     resp = self.llm.invoke(repair_prompt + "\n\n" + json.dumps(payload, ensure_ascii=False))
-                    repaired_sql = _extract_sql_from_text(resp.content if hasattr(resp, "content") else str(resp))
+                    raw = resp.content if hasattr(resp, "content") else resp
+                    txt: str = _stringify_llm_content(raw)
+                    repaired_sql = _extract_sql_from_text(txt)
                     if repaired_sql:
                         df, executed_sql = self.safe_exec.execute_select(repaired_sql)
                         sql = repaired_sql
