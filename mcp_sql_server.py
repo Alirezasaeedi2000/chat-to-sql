@@ -5,7 +5,7 @@ import os
 from typing import Any, Dict, Optional, Callable
 
 from mcp.server import Server
-from mcp.server.models import InitializationOptions, NotificationOptions
+from mcp.server.models import InitializationOptions
 from mcp.server.stdio import stdio_server
 
 from query_processor import SafeSqlExecutor, create_engine_from_env
@@ -207,12 +207,12 @@ def _list_tools_payload() -> Dict[str, Any]:
     }
 
 
-@server.method("tools/list")
+@server.method("tools/list")  # type: ignore[attr-defined]
 async def _tools_list() -> Dict[str, Any]:
     return _list_tools_payload()
 
 
-@server.method("tools/call")
+@server.method("tools/call")  # type: ignore[attr-defined]
 async def _tools_call(name: str, arguments: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
     func = TOOLS.get(name)
     if func is None:
@@ -223,10 +223,7 @@ async def _tools_call(name: str, arguments: Optional[Dict[str, Any]] = None, **_
 
 async def main() -> None:
     async with stdio_server() as (read, write):
-        capabilities = server.get_capabilities(
-            notification_options=NotificationOptions(),
-            experimental_capabilities={},
-        )
+        capabilities = server.get_capabilities()  # type: ignore[call-arg]
         await server.run(
             read,
             write,
