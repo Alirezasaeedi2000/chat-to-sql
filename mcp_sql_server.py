@@ -207,18 +207,19 @@ def _list_tools_payload() -> Dict[str, Any]:
     }
 
 
-@server.method("tools/list")  # type: ignore[attr-defined]
-async def _tools_list() -> Dict[str, Any]:
-    return _list_tools_payload()
+if hasattr(server, "method"):
+    @server.method("tools/list")  # type: ignore[attr-defined]
+    async def _tools_list() -> Dict[str, Any]:
+        return _list_tools_payload()
 
 
-@server.method("tools/call")  # type: ignore[attr-defined]
-async def _tools_call(name: str, arguments: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
-    func = TOOLS.get(name)
-    if func is None:
-        return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}], "is_error": True}
-    result = await func(arguments or {})
-    return {"content": [{"type": "json", "json": result}], "is_error": False}
+    @server.method("tools/call")  # type: ignore[attr-defined]
+    async def _tools_call(name: str, arguments: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+        func = TOOLS.get(name)
+        if func is None:
+            return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}], "is_error": True}
+        result = await func(arguments or {})
+        return {"content": [{"type": "json", "json": result}], "is_error": False}
 
 
 async def main() -> None:
