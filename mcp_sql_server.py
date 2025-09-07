@@ -4,9 +4,18 @@ import logging
 import os
 from typing import Any, Dict, Optional, Callable
 
-from mcp.server.lowlevel import Server, NotificationOptions
-from mcp.server.models import InitializationOptions
+from mcp.server import Server
 from mcp.server.stdio import stdio_server
+try:
+    # Preferred in some versions
+    from mcp.server.models import InitializationOptions, NotificationOptions
+except Exception:  # pragma: no cover - version compatibility
+    try:
+        # Alternate location in other versions
+        from mcp.types import InitializationOptions, NotificationOptions
+    except Exception:  # pragma: no cover
+        InitializationOptions = None  # type: ignore
+        NotificationOptions = None  # type: ignore
 
 from query_processor import SafeSqlExecutor, create_engine_from_env
 from vector import VectorStoreManager
@@ -207,34 +216,41 @@ def _list_tools_payload() -> Dict[str, Any]:
     }
 
 
-@server.method("tools/list")
-async def _tools_list() -> Dict[str, Any]:
-    return _list_tools_payload()
+if hasattr(server, "method"):
+    @server.method("tools/list")
+    async def _tools_list() -> Dict[str, Any]:
+        return _list_tools_payload()
 
-
-@server.method("tools/call")
-async def _tools_call(name: str, arguments: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
-    func = TOOLS.get(name)
-    if func is None:
-        return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}], "is_error": True}
-    result = await func(arguments or {})
-    return {"content": [{"type": "json", "json": result}], "is_error": False}
+    @server.method("tools/call")
+    async def _tools_call(name: str, arguments: Optional[Dict[str, Any]] = None, **_: Any) -> Dict[str, Any]:
+        func = TOOLS.get(name)
+        if func is None:
+            return {"content": [{"type": "text", "text": f"Unknown tool: {name}"}], "is_error": True}
+        result = await func(arguments or {})
+        return {"content": [{"type": "json", "json": result}], "is_error": False}
 
 
 async def main() -> None:
     async with stdio_server() as (read, write):
-        await server.run(
-            read,
-            write,
-            InitializationOptions(
-                server_name="mysql-nl2sql",
-                server_version="0.1.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
-                ),
-            ),
-        )
+        init_opts: Any
+        if InitializationOptions is not None and NotificationOptions is not None and hasattr(server, "get_capabilities"):
+            try:
+                init_opts = InitializationOptions(
+                    server_name="mysql-nl2sql",
+                    server_version="0.1.0",
+                    capabilities=server.get_capabilities(
+                        notification_options=NotificationOptions(),
+                        experimental_capabilities={},
+                    ),
+                )
+            except Exception:
+                init_opts = InitializationOptions(server_name="mysql-nl2sql", server_version="0.1.0")  # type: ignore[arg-type]
+        elif InitializationOptions is not None:
+            init_opts = InitializationOptions(server_name="mysql-nl2sql", server_version="0.1.0")  # type: ignore[arg-type]
+        else:
+            # Fallback for unknown versions; may still work at runtime
+            init_opts = {"server_name": "mysql-nl2sql", "server_version": "0.1.0"}
+        await server.run(read, write, init_opts)
 
 
 if __name__ == "__main__":
