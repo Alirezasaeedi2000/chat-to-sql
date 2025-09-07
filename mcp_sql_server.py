@@ -6,7 +6,6 @@ from typing import Any, Dict, Optional
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import JSONResponse
 
 from query_processor import SafeSqlExecutor, create_engine_from_env
 from vector import VectorStoreManager
@@ -28,58 +27,58 @@ server = Server("mysql-nl2sql")
 
 
 @server.tool()
-async def health_check() -> JSONResponse:
-    return JSONResponse(content={"status": "ok"})
+async def health_check() -> Dict[str, Any]:
+    return {"status": "ok"}
 
 
 @server.tool()
-async def get_schema() -> JSONResponse:
+async def get_schema() -> Dict[str, Any]:
     execu = build_executor()
-    return JSONResponse(content=execu.get_schema_summary())
+    return execu.get_schema_summary()
 
 
 @server.tool()
-async def describe_table(table: str) -> JSONResponse:
+async def describe_table(table: str) -> Dict[str, Any]:
     execu = build_executor()
-    return JSONResponse(content=execu.describe_table(table))
+    return execu.describe_table(table)
 
 
 @server.tool()
-async def find_tables(pattern: str) -> JSONResponse:
+async def find_tables(pattern: str) -> Dict[str, Any]:
     execu = build_executor()
-    return JSONResponse(content={"matches": execu.find_tables(pattern)})
+    return {"matches": execu.find_tables(pattern)}
 
 
 @server.tool()
-async def find_columns(pattern: str) -> JSONResponse:
+async def find_columns(pattern: str) -> Dict[str, Any]:
     execu = build_executor()
-    return JSONResponse(content={"matches": execu.find_columns(pattern)})
+    return {"matches": execu.find_columns(pattern)}
 
 
 @server.tool()
-async def distinct_values(table: str, column: str, limit: int = 50) -> JSONResponse:
+async def distinct_values(table: str, column: str, limit: int = 50) -> Dict[str, Any]:
     execu = build_executor()
     vals = execu.distinct_values(table, column, limit)
-    return JSONResponse(content={"values": vals})
+    return {"values": vals}
 
 
 @server.tool()
-async def run_sql(query: str) -> JSONResponse:
+async def run_sql(query: str) -> Dict[str, Any]:
     execu = build_executor()
     df, safe_sql = execu.execute_select(query)
     rows = df.to_dict(orient="records")
-    return JSONResponse(content={"sql": safe_sql, "row_count": len(df), "rows": rows[:50]})
+    return {"sql": safe_sql, "row_count": len(df), "rows": rows[:50]}
 
 
 @server.tool()
-async def explain_sql(query: str) -> JSONResponse:
+async def explain_sql(query: str) -> Dict[str, Any]:
     execu = build_executor()
     df = execu.explain(query)
-    return JSONResponse(content={"rows": df.to_dict(orient="records")})
+    return {"rows": df.to_dict(orient="records")}
 
 
 @server.tool()
-async def export(query: str, fmt: str = "csv") -> JSONResponse:
+async def export(query: str, fmt: str = "csv") -> Dict[str, Any]:
     execu = build_executor()
     df, safe_sql = execu.execute_select(query)
     os.makedirs("outputs/exports", exist_ok=True)
@@ -93,8 +92,8 @@ async def export(query: str, fmt: str = "csv") -> JSONResponse:
         path = base + ".json"
         df.to_json(path, orient="records")
     else:
-        return JSONResponse(content={"error": f"Unsupported format: {fmt}"})
-    return JSONResponse(content={"sql": safe_sql, "path": path, "row_count": len(df)})
+        return {"error": f"Unsupported format: {fmt}"}
+    return {"sql": safe_sql, "path": path, "row_count": len(df)}
 
 
 SAVED_QUERIES = os.path.join("outputs", "saved_queries.json")
@@ -123,7 +122,7 @@ def _save_saved(data: Dict[str, Dict[str, Any]]) -> None:
 
 
 @server.tool()
-async def save_query(name: str, query: str, description: Optional[str] = None) -> JSONResponse:
+async def save_query(name: str, query: str, description: Optional[str] = None) -> Dict[str, Any]:
     execu = build_executor()
     execu.validate_select_only(query)
     data = _load_saved()
@@ -134,18 +133,18 @@ async def save_query(name: str, query: str, description: Optional[str] = None) -
         VectorStoreManager().add_past_query(query, result_summary=description)
     except Exception:
         pass
-    return JSONResponse(content={"status": "saved", "name": name})
+    return {"status": "saved", "name": name}
 
 
 @server.tool()
-async def run_saved_query(name: str) -> JSONResponse:
+async def run_saved_query(name: str) -> Dict[str, Any]:
     data = _load_saved()
     item = data.get(name)
     if not item:
-        return JSONResponse(content={"error": f"No saved query named {name}"})
+        return {"error": f"No saved query named {name}"}
     execu = build_executor()
     df, safe_sql = execu.execute_select(item["query"])
-    return JSONResponse(content={"sql": safe_sql, "row_count": len(df), "rows": df.to_dict(orient="records")[:50]})
+    return {"sql": safe_sql, "row_count": len(df), "rows": df.to_dict(orient="records")[:50]}
 
 
 async def main() -> None:
